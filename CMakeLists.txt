@@ -151,6 +151,31 @@ target_link_libraries(tenganisha_offline_test
         # they make JUCE's own module TUs noisy in console-app targets.
         juce::juce_recommended_config_flags)
 
+# ---------------------------------------------------------------- UI snapshots
+# Renders the editor offscreen to PNGs per engine state (visual review, README).
+juce_add_console_app(tenganisha_ui_snapshot PRODUCT_NAME "tenganisha_ui_snapshot")
+
+target_sources(tenganisha_ui_snapshot PRIVATE
+    test/ui_snapshot.cpp
+    src/PluginProcessor.cpp
+    src/PluginEditor.cpp
+    src/SeparationEngine.cpp)
+
+target_include_directories(tenganisha_ui_snapshot PRIVATE src)
+
+target_compile_definitions(tenganisha_ui_snapshot PRIVATE
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0)
+
+target_link_libraries(tenganisha_ui_snapshot
+    PRIVATE
+        demucs_inference
+        juce::juce_audio_utils
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags)
+
 # ---------------------------------------------------------------- Host-sim test
 # Drives the full processor with a scripted AudioPlayHead: record -> separate ->
 # playback, checking sample alignment across loop/jump plus state transitions.

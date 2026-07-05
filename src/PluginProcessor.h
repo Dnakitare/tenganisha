@@ -50,9 +50,11 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();
 
     // ---- capture (audio thread writes, engine reads after handoff) ----
-    juce::AudioBuffer<float> captureBuffer;
-    std::atomic<int>         captureLength { 0 };
-    juce::int64              captureTimelineStart = 0;
+    // captureBuffer is allocated lazily in startRecording() (message thread):
+    // 10 min of stereo floats is ~220 MB and must not be paid per idle instance.
+    juce::AudioBuffer<float>  captureBuffer;
+    std::atomic<int>          captureLength { 0 };
+    std::atomic<juce::int64>  captureTimelineStart { 0 }; // audio thread writes, message thread reads
 
     // ---- playback ----
     StemSetPtr currentStems;                 // atomic shared_ptr swap

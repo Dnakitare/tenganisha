@@ -1,5 +1,7 @@
 # Tenganisha
 
+![Tenganisha editor, stems live](docs/ui/state-stems-live.png)
+
 A VST3/AU stem separation plugin. Record a section straight off the host timeline, separate it into drums / bass / other / vocals with HTDemucs (via demucs.cpp), then mix the stems **inline, playhead-aligned** — no bounce-out/re-import round trip.
 
 > Name check: "Tenganisha" (Swahili: *to separate*) has **not** been through a trademark / npm / prior-art sweep. Rename freely; it's one string in `CMakeLists.txt` plus the class prefix.

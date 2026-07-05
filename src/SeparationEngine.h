@@ -23,8 +23,10 @@ public:
     void loadModelAsync (const juce::File& ggmlWeights);
 
     // audio: stereo, host sample rate. timelineStart: host-timeline sample
-    // position where this capture began.
-    void separateAsync (juce::AudioBuffer<float> audio,
+    // position where this capture began. Returns false (job NOT queued) when
+    // the engine is busy or no model is loaded — the caller must not wait for
+    // onStemsReady in that case.
+    bool separateAsync (juce::AudioBuffer<float> audio,
                         double hostSampleRate,
                         juce::int64 timelineStart);
 
@@ -47,6 +49,10 @@ private:
     enum class Job { none, load, separate };
 
     std::unique_ptr<demucs_model_holder> model;
+    // Callbacks are dispatched via MessageManager::callAsync; a queued lambda
+    // can outlive this engine (plugin removed while separating). Each dispatch
+    // captures a weak_ptr to this token and does nothing once we're gone.
+    std::shared_ptr<int>  callbackLifetime = std::make_shared<int> (0);
     std::atomic<bool>  modelLoaded { false };
     std::atomic<bool>  busy        { false };
     std::atomic<float> progress    { 0.0f };

@@ -220,6 +220,17 @@ int main (int argc, char** argv)
     check (std::abs (buf.getSample (0, 0) - srcSample (recStart)) < 1.0e-6,
            "passthrough leaves input untouched");
 
+    // ---- test 6: sample-rate change discards stems (they'd play mispitched) ----
+    proc.startRecording();
+    for (int b = 0; b < (int) (1.5 * kRate / kBlock); ++b)
+        processAt (recStart + (juce::int64) b * kBlock);
+    proc.stopRecordingAndSeparate();
+    while (proc.getEngineState() == tg::EngineState::separating) pumpMessages (100);
+    check (proc.getStems() != nullptr, "second take separates");
+    proc.prepareToPlay (48000.0, kBlock);
+    check (proc.getStems() == nullptr, "sample-rate change discards stems");
+    check (proc.getEngineState() == tg::EngineState::passthrough, "sample-rate change -> passthrough");
+
     proc.releaseResources();
     proc.setPlayHead (nullptr);
 

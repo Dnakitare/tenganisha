@@ -81,11 +81,11 @@ void SeparationEngine::loadModelAsync (const juce::File& ggmlWeights)
     notify();
 }
 
-void SeparationEngine::separateAsync (juce::AudioBuffer<float> audio,
+bool SeparationEngine::separateAsync (juce::AudioBuffer<float> audio,
                                       double hostSampleRate,
                                       juce::int64 timelineStart)
 {
-    if (busy.load() || ! modelLoaded.load()) return;
+    if (busy.load() || ! modelLoaded.load()) return false;
     {
         const juce::ScopedLock sl (jobLock);
         jobAudio         = std::move (audio);
@@ -95,6 +95,7 @@ void SeparationEngine::separateAsync (juce::AudioBuffer<float> audio,
     }
     pendingJob.store ((int) Job::separate);
     notify();
+    return true;
 }
 
 void SeparationEngine::cancel()
@@ -135,8 +136,10 @@ void SeparationEngine::run()
             }
             auto cbOk  = onModelLoaded;
             auto cbErr = onError;
-            juce::MessageManager::callAsync ([ok, cbOk, cbErr]
+            juce::MessageManager::callAsync (
+                [alive = std::weak_ptr<int> (callbackLifetime), ok, cbOk, cbErr]
             {
+                if (alive.expired()) return; // engine (and its owner) are gone
                 if (ok)  { if (cbOk)  cbOk(); }
                 else     { if (cbErr) cbErr ("Could not load ggml weights file."); }
             });
@@ -199,8 +202,10 @@ void SeparationEngine::run()
             }
             auto cb = onStemsReady;
             StemSetPtr published = set;
-            juce::MessageManager::callAsync ([cb, published]
+            juce::MessageManager::callAsync (
+                [alive = std::weak_ptr<int> (callbackLifetime), cb, published]
             {
+                if (alive.expired()) return; // engine (and its owner) are gone
                 if (cb) cb (published);
             });
         }
