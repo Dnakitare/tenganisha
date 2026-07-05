@@ -54,8 +54,8 @@
 
 ## Definition of done
 
-- [ ] Clean Release build on macOS (arm64) with zero warnings in `src/`
-- [ ] pluginval strictness 10 pass, VST3 + AU
-- [ ] Null-ish reconstruction test scripted and passing
-- [ ] Reaper manual test checklist above passing
+- [x] Clean Release build on macOS (arm64) with zero warnings in `src/` (2026-07-05; also universal arm64+x86_64, x86 slice pluginval-validated under Rosetta)
+- [x] pluginval strictness 10 pass, VST3 + AU (both SUCCESS; auval PASS)
+- [x] Null-ish reconstruction test scripted and passing (`tenganisha_offline_test`: -34.7 dB on real music; plus `tenganisha_host_sim_test`: sample-exact alignment, -132 dB vs stem sum)
+- [ ] Reaper manual test checklist above passing (scripted render smoke test in scratchpad blocked on Reaper's first-run eval dialog; live record + drag-to-track click-through still needs a human)
 - [ ] README build instructions verified from scratch on a clean machine/container

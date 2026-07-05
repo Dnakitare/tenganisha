@@ -38,9 +38,16 @@ Optional speedups: OpenMP is linked if found; for serious throughput build demuc
 | `ggml-model-htdemucs-4s-f16.bin` | 4 | default, best quality/size balance |
 | `ggml-model-htdemucs-6s-f16.bin` | 6 | guitar+piano folded into "Other" in this UI |
 
+## Status (2026-07-05)
+
+- Builds clean (zero warnings) on macOS arm64 and as a universal arm64+x86_64 binary; the x86_64 slice passes pluginval under Rosetta.
+- pluginval strictness 10: VST3 and AU both SUCCESS; auval passes.
+- `tenganisha_offline_test`: stems sum back to the input at -34.7 dB residual on real music (-28 dB on the synthetic self-test), ~x2.5 realtime inference on an M2.
+- `tenganisha_host_sim_test`: sample-exact timeline alignment (output matches stem sum at -132 dB), loop/relocate bit-identical, state machine correct through record/separate/playback/discard.
+- Still manual: DAW click-through (record from a real session, drag-a-stem-to-track) — see HANDOFF.md Phase 3.
+
 ## Honest limitations / roadmap
 
-- **Not compiled end-to-end in this session** — the demucs.cpp API calls are verified against the actual headers, but expect the usual first-build friction (JUCE version drift, Eigen unsupported-module include paths).
 - Separation is CPU-only; a 3-minute song is roughly real-time × 1–4 on a modern laptop.
 - `cancel()` is drop-on-completion, not mid-segment abort.
 - Roadmap: waveform display of capture with stem overlays, fine-tuned per-stem models (`htdemucs_ft`) as an ensemble "quality" mode, offline file-drop mode (drag a WAV into the plugin instead of recording), stem re-render into host via ARA (the real endgame for inline editing).
