@@ -14,14 +14,9 @@ FetchContent_Declare(JUCE
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(JUCE)
 
-# ---------------------------------------------------------------- Eigen (header-only)
-FetchContent_Declare(eigen
-    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-    GIT_TAG        3.4.0
-    GIT_SHALLOW    TRUE)
-FetchContent_Populate(eigen)   # header-only; skip Eigen's own CMake
-
 # ---------------------------------------------------------------- demucs.cpp (inference backend)
+# Its vendor/eigen submodule (Eigen master pin) comes along in the clone; the
+# demucs.cpp headers need that revision — Eigen 3.4.0 is too old for them.
 FetchContent_Declare(demucscpp
     GIT_REPOSITORY https://github.com/sevagh/demucs.cpp.git
     GIT_TAG        main
@@ -38,9 +33,11 @@ add_library(demucs_inference STATIC
     ${demucscpp_SOURCE_DIR}/src/lstm.cpp
     ${demucscpp_SOURCE_DIR}/src/crosstransformer.cpp)
 
-target_include_directories(demucs_inference PUBLIC
+# SYSTEM: their headers are compiled into our TUs (SeparationEngine.cpp) and
+# must not trip juce_recommended_warning_flags there.
+target_include_directories(demucs_inference SYSTEM PUBLIC
     ${demucscpp_SOURCE_DIR}/src
-    ${eigen_SOURCE_DIR})
+    ${demucscpp_SOURCE_DIR}/vendor/eigen)
 
 # Fast math for inference, but keep it local to this target.
 if(MSVC)
@@ -84,4 +81,31 @@ target_link_libraries(Tenganisha
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)
+
+# ---------------------------------------------------------------- Offline test
+# Console harness driving the real SeparationEngine: model load -> separate ->
+# stems summed at unity must reconstruct the input (null test, RMS gate).
+juce_add_console_app(tenganisha_offline_test PRODUCT_NAME "tenganisha_offline_test")
+
+target_sources(tenganisha_offline_test PRIVATE
+    test/offline_test.cpp
+    src/SeparationEngine.cpp)
+
+target_include_directories(tenganisha_offline_test PRIVATE src)
+
+# runDispatchLoopUntil (used to pump engine callbacks) needs modal loops.
+target_compile_definitions(tenganisha_offline_test PRIVATE
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0)
+
+target_link_libraries(tenganisha_offline_test
+    PRIVATE
+        demucs_inference
+        juce::juce_audio_formats
+        juce::juce_audio_processors
+        juce::juce_events
+    PUBLIC
+        juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)

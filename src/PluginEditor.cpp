@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 
 namespace tg
 {
@@ -163,7 +164,7 @@ void TenganishaEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff181820));
     g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (18.0f, juce::Font::bold));
+    g.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
     g.drawText ("Tenganisha", 12, 8, 220, 24, juce::Justification::centredLeft);
 }
 
