@@ -109,3 +109,30 @@ target_link_libraries(tenganisha_offline_test
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
+
+# ---------------------------------------------------------------- Host-sim test
+# Drives the full processor with a scripted AudioPlayHead: record -> separate ->
+# playback, checking sample alignment across loop/jump plus state transitions.
+juce_add_console_app(tenganisha_host_sim_test PRODUCT_NAME "tenganisha_host_sim_test")
+
+target_sources(tenganisha_host_sim_test PRIVATE
+    test/host_sim_test.cpp
+    src/PluginProcessor.cpp
+    src/PluginEditor.cpp
+    src/SeparationEngine.cpp)
+
+target_include_directories(tenganisha_host_sim_test PRIVATE src)
+
+target_compile_definitions(tenganisha_host_sim_test PRIVATE
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0)
+
+target_link_libraries(tenganisha_host_sim_test
+    PRIVATE
+        demucs_inference
+        juce::juce_audio_utils
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
