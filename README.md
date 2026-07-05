@@ -1,0 +1,50 @@
+# Tenganisha
+
+A VST3/AU stem separation plugin. Record a section straight off the host timeline, separate it into drums / bass / other / vocals with HTDemucs (via demucs.cpp), then mix the stems **inline, playhead-aligned** — no bounce-out/re-import round trip.
+
+> Name check: "Tenganisha" (Swahili: *to separate*) has **not** been through a trademark / npm / prior-art sweep. Rename freely; it's one string in `CMakeLists.txt` plus the class prefix.
+
+## Why this architecture
+
+- **Inference backend: [demucs.cpp](https://github.com/sevagh/demucs.cpp)** (ggml + Eigen, C++17). Chosen over ONNX Runtime deliberately: HTDemucs is a hybrid time/spectral model and its STFT ops make ONNX export fragile. demucs.cpp runs the reference v4 hybrid-transformer weights natively in C++, no Python, no runtime DLL hell, one static lib.
+- **Non-real-time by design.** HTDemucs is not a causal model; anything claiming "real-time Demucs-quality separation" is trading away quality. The workflow is capture → separate (seconds to minutes depending on length/CPU) → timeline-aligned playback.
+- **Lock-free audio thread.** Stems are published as an immutable `shared_ptr<StemSet>` swapped atomically; parameters go through APVTS raw-value atomics with 20 ms gain smoothing. No locks, no allocation in `processBlock`.
+- **Timeline alignment.** Capture records the host playhead sample position at record start; playback indexes stems by `playhead − start`, so the separated material lands exactly where the original sat. Loop, scrub, and relocate freely.
+
+## Workflow
+
+1. **Load Model…** → pick a ggml `.bin` (see `scripts/download_model.sh`).
+2. **Record**, play the section in your DAW, **Separate**.
+3. Mix with per-stem gain / mute / solo, or **drag a stem strip into your DAW** to get a 24-bit WAV on a new track.
+4. **Discard** returns to clean passthrough.
+
+## Building
+
+Requires CMake ≥ 3.22 and a C++17 compiler. JUCE, Eigen, and demucs.cpp are fetched automatically.
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j
+```
+
+The VST3 is copied to the system plugin folder automatically (`COPY_PLUGIN_AFTER_BUILD`). macOS: works with Apple Clang, universal binaries need the usual `CMAKE_OSX_ARCHITECTURES` dance. Windows: demucs.cpp is developed against GCC/Clang — prefer the LLVM/clang-cl toolchain over MSVC.
+
+Optional speedups: OpenMP is linked if found; for serious throughput build demucs.cpp's BLAS path (OpenBLAS/MKL) — see its CMake options and port the `EIGEN_USE_BLAS` define into `demucs_inference` in our CMakeLists.
+
+## Models
+
+| File | Stems | Notes |
+|---|---|---|
+| `ggml-model-htdemucs-4s-f16.bin` | 4 | default, best quality/size balance |
+| `ggml-model-htdemucs-6s-f16.bin` | 6 | guitar+piano folded into "Other" in this UI |
+
+## Honest limitations / roadmap
+
+- **Not compiled end-to-end in this session** — the demucs.cpp API calls are verified against the actual headers, but expect the usual first-build friction (JUCE version drift, Eigen unsupported-module include paths).
+- Separation is CPU-only; a 3-minute song is roughly real-time × 1–4 on a modern laptop.
+- `cancel()` is drop-on-completion, not mid-segment abort.
+- Roadmap: waveform display of capture with stem overlays, fine-tuned per-stem models (`htdemucs_ft`) as an ensemble "quality" mode, offline file-drop mode (drag a WAV into the plugin instead of recording), stem re-render into host via ARA (the real endgame for inline editing).
+
+## Legal note
+
+HTDemucs weights are MIT-licensed (Meta research); demucs.cpp is MIT. Fine for commercial use, but do your own diligence before shipping.
