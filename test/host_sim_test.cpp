@@ -113,6 +113,15 @@ int main (int argc, char** argv)
     proc.startRecording();
     check (proc.getEngineState() == tg::EngineState::recording, "enters recording");
 
+    // Record armed while the host transport is stopped: REAPER et al. keep
+    // calling processBlock (position parked, isPlaying false). None of this
+    // may land in the capture or stamp the timeline start.
+    ph.playing = false;
+    for (int b = 0; b < 40; ++b)
+        processAt (recStart - 30'000, false);
+    check (proc.getRecordedSeconds() == 0.0, "stopped-transport blocks are not captured");
+    ph.playing = true;
+
     const int recBlocks = (int) std::ceil (8.0 * kRate / kBlock); // ~8 s
     for (int b = 0; b < recBlocks; ++b)
     {

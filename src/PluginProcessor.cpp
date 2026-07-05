@@ -133,6 +133,14 @@ void TenganishaProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     {
         case EngineState::recording:
         {
+            // Hosts keep running FX while the transport is stopped (REAPER's
+            // anticipative processing even runs faster than realtime). Only
+            // capture timeline-attached audio, so the first *playing* block
+            // stamps captureTimelineStart and stopped silence never lands in
+            // the buffer.
+            if (! hostPlaying)
+                break;
+
             const int written = captureLength.load();
             const int room    = captureBuffer.getNumSamples() - written;
             const int n       = juce::jmin (numSamples, room);

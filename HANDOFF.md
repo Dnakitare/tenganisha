@@ -57,5 +57,11 @@
 - [x] Clean Release build on macOS (arm64) with zero warnings in `src/` (2026-07-05; also universal arm64+x86_64, x86 slice pluginval-validated under Rosetta)
 - [x] pluginval strictness 10 pass, VST3 + AU (both SUCCESS; auval PASS)
 - [x] Null-ish reconstruction test scripted and passing (`tenganisha_offline_test`: -34.7 dB on real music; plus `tenganisha_host_sim_test`: sample-exact alignment, -132 dB vs stem sum)
-- [~] Reaper: scripted half done — `test/reaper_render_test.lua` loads the VST3 in REAPER, renders real audio through it, null-tests at -93 dB RMS vs input (2026-07-05). Still manual: live record/separate on the timeline, loop/relocate listening check, drag-a-stem-to-track
+- [x] Reaper checklist (2026-07-05, automated via ReaScript + macOS accessibility):
+  - passthrough render null-tests at -93 dB RMS vs input
+  - live record off the timeline → separate → stems land sample-aligned: offline bounce of stemPlayback nulls vs input at -43.7 dB (model error, not misalignment)
+  - realtime looped playback: laps bit-consistent (-51 dB lap-to-lap), match the offline render at -48.6 dB and the input at -45.6 dB (a 77.5 ms constant is REAPER's output-record latency, not the plugin)
+  - drag-a-stem-strip → valid 24-bit/44.1k stereo WAV lands on a REAPER track
+  - found+fixed live: hosts run FX while the transport is stopped (REAPER anticipative processing runs it faster than realtime); capture now only ingests blocks where the host reports playing, else the take is stuffed with silence and misaligned (was -13 dB residual before fix)
+  - still human: subjective separation quality listening; drag-to-Finder
 - [ ] README build instructions verified from scratch on a clean machine/container

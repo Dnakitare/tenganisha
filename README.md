@@ -53,7 +53,8 @@ Accelerate does the heavy lifting; OpenMP adds ~5% on top. **Known debt:** with 
 - pluginval strictness 10: VST3 and AU both SUCCESS; auval passes.
 - `tenganisha_offline_test`: stems sum back to the input at -34.7 dB residual on real music (-28 dB on the synthetic self-test), ~x2.5 realtime inference on an M2.
 - `tenganisha_host_sim_test`: sample-exact timeline alignment (output matches stem sum at -132 dB), loop/relocate bit-identical, state machine correct through record/separate/playback/discard.
-- Still manual: DAW click-through (record from a real session, drag-a-stem-to-track) — see HANDOFF.md Phase 3.
+- Live REAPER validation (driven via ReaScript + accessibility automation): record off the timeline → separate → offline bounce nulls vs input at -43.7 dB; realtime looped playback matches at -45.6 dB; drag-a-stem delivers a valid 24-bit WAV onto a track. See HANDOFF.md for details, including the stopped-transport capture bug this caught.
+- Still human: does the separation *sound* good. Everything mechanical is verified.
 
 ## Honest limitations / roadmap
 
