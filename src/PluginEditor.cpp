@@ -85,8 +85,6 @@ void StemStrip::mouseDrag (const juce::MouseEvent&)
 TenganishaEditor::TenganishaEditor (TenganishaProcessor& p)
     : AudioProcessorEditor (p), proc (p)
 {
-    setSize (520, 380);
-
     for (int s = 0; s < kNumStems; ++s)
         addAndMakeVisible (strips.add (new StemStrip (proc, s)));
 
@@ -120,6 +118,9 @@ TenganishaEditor::TenganishaEditor (TenganishaProcessor& p)
 
     startTimerHz (15);
     updateForState();
+
+    // Last: triggers a synchronous resized(), which needs the strips to exist.
+    setSize (520, 380);
 }
 
 void TenganishaEditor::timerCallback()
