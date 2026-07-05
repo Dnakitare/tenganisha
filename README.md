@@ -29,7 +29,16 @@ cmake --build build --config Release -j
 
 The VST3 is copied to the system plugin folder automatically (`COPY_PLUGIN_AFTER_BUILD`). macOS: works with Apple Clang, universal binaries need the usual `CMAKE_OSX_ARCHITECTURES` dance. Windows: demucs.cpp is developed against GCC/Clang — prefer the LLVM/clang-cl toolchain over MSVC.
 
-Optional speedups: OpenMP is linked if found; for serious throughput build demucs.cpp's BLAS path (OpenBLAS/MKL) — see its CMake options and port the `EIGEN_USE_BLAS` define into `demucs_inference` in our CMakeLists.
+Inference speed (defaults ON on macOS, measured on an M2, 20 s clip):
+
+| Config | Time | Realtime |
+|---|---|---|
+| plain Eigen | 49.8 s | x2.49 |
+| + OpenMP (`TENGANISHA_OPENMP`) | 47.4 s | x2.37 |
+| + Accelerate BLAS (`TENGANISHA_ACCELERATE`) | 34.0 s | x1.70 |
+| both | 32.2 s | x1.61 |
+
+Accelerate does the heavy lifting; OpenMP adds ~5% on top. **Known debt:** with OpenMP on, the binary links `libomp.dylib` from the Homebrew prefix, which is fine for a dev machine and wrong for distribution. Release builds should use `-DTENGANISHA_OPENMP=OFF` (Accelerate-only) until libomp is bundled or statically linked. On Linux/Windows, OpenMP comes from the toolchain and none of this applies; OpenBLAS/MKL via `EIGEN_USE_BLAS` remains an option there.
 
 ## Models
 

@@ -46,9 +46,49 @@ else()
     target_compile_options(demucs_inference PRIVATE -O3 -ffast-math -fno-finite-math-only)
 endif()
 
+# Threaded Eigen GEMM. Apple Clang has no native OpenMP; point FindOpenMP at
+# Homebrew's libomp. Note the dylib dependency this creates on brew's libomp —
+# fine for local dev, wrong for distribution (see TENGANISHA_OPENMP below).
+option(TENGANISHA_OPENMP "Thread Eigen GEMM with OpenMP" ON)
+if(NOT TENGANISHA_OPENMP)
+    set(OpenMP_CXX_FOUND FALSE)
+else()
 find_package(OpenMP QUIET)
+if(NOT OpenMP_CXX_FOUND AND APPLE)
+    execute_process(COMMAND brew --prefix libomp
+        OUTPUT_VARIABLE LIBOMP_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(LIBOMP_PREFIX AND EXISTS ${LIBOMP_PREFIX}/lib/libomp.dylib)
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
+        set(OpenMP_CXX_LIB_NAMES omp)
+        set(OpenMP_omp_LIBRARY ${LIBOMP_PREFIX}/lib/libomp.dylib)
+        find_package(OpenMP QUIET)
+    endif()
+endif()
+endif()
 if(OpenMP_CXX_FOUND)
-    target_link_libraries(demucs_inference PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "Tenganisha: OpenMP enabled for demucs_inference")
+    if(APPLE)
+        # Compile flags PRIVATE: Eigen's parallel GEMM instantiates inside this
+        # target's TUs, and the flags must not leak into JUCE/plugin TUs
+        # (they re-trigger warnings JUCE suppresses). Link stays PUBLIC so the
+        # plugin binary gets libomp.
+        separate_arguments(TENGANISHA_OMP_FLAGS NATIVE_COMMAND "${OpenMP_CXX_FLAGS}")
+        target_compile_options(demucs_inference PRIVATE ${TENGANISHA_OMP_FLAGS})
+        target_link_libraries(demucs_inference PUBLIC ${OpenMP_omp_LIBRARY})
+    else()
+        target_link_libraries(demucs_inference PUBLIC OpenMP::OpenMP_CXX)
+    endif()
+else()
+    message(STATUS "Tenganisha: OpenMP NOT found — inference GEMM single-threaded")
+endif()
+
+# Route Eigen's big matrix products through Accelerate (AMX) on macOS.
+# PUBLIC define: every TU that includes Eigen must agree on EIGEN_USE_BLAS.
+option(TENGANISHA_ACCELERATE "Use Apple Accelerate BLAS for inference" ON)
+if(APPLE AND TENGANISHA_ACCELERATE)
+    target_compile_definitions(demucs_inference PUBLIC EIGEN_USE_BLAS)
+    target_link_libraries(demucs_inference PUBLIC "-framework Accelerate")
 endif()
 
 # ---------------------------------------------------------------- Plugin
@@ -107,8 +147,9 @@ target_link_libraries(tenganisha_offline_test
         juce::juce_audio_processors
         juce::juce_events
     PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_warning_flags)
+        # config only: recommended warning flags stay on the plugin target;
+        # they make JUCE's own module TUs noisy in console-app targets.
+        juce::juce_recommended_config_flags)
 
 # ---------------------------------------------------------------- Host-sim test
 # Drives the full processor with a scripted AudioPlayHead: record -> separate ->
@@ -134,5 +175,6 @@ target_link_libraries(tenganisha_host_sim_test
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_warning_flags)
+        # config only: recommended warning flags stay on the plugin target;
+        # they make JUCE's own module TUs noisy in console-app targets.
+        juce::juce_recommended_config_flags)
