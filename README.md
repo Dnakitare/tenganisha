@@ -33,7 +33,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release -j
 ```
 
-The VST3 is copied to the system plugin folder automatically (`COPY_PLUGIN_AFTER_BUILD`). macOS: works with Apple Clang, universal binaries need the usual `CMAKE_OSX_ARCHITECTURES` dance. Windows: demucs.cpp is developed against GCC/Clang — prefer the LLVM/clang-cl toolchain over MSVC.
+The VST3 is copied to the system plugin folder automatically (`COPY_PLUGIN_AFTER_BUILD`). macOS: works with Apple Clang, universal binaries need the usual `CMAKE_OSX_ARCHITECTURES` dance. Windows: untested. demucs.cpp is developed against GCC/Clang, so if you try it, prefer the LLVM/clang-cl toolchain over MSVC.
 
 Inference speed (macOS defaults, measured on an M2, 20 s clip):
 
@@ -68,8 +68,8 @@ Accelerate does the heavy lifting and is on by default. **OpenMP is off by defau
 - Separation is CPU-only; a 3-minute song is roughly real-time × 1–4 on a modern laptop (× 6–7 with the fine-tuned ensemble).
 - Fine-tuned stems are cleaner individually but sum slightly less exactly to the input than the standard model's (measured -21 dB vs -31 dB reconstruction residual): each specialist optimises its own stem, so the four outputs aren't a perfect partition of the mix. Prefer standard for inline full-mix playback fidelity, fine-tuned for soloed/exported stems.
 - `cancel()` is drop-on-completion, not mid-segment abort.
-- Roadmap: waveform display of capture with stem overlays, fine-tuned per-stem models (`htdemucs_ft`) as an ensemble "quality" mode, offline file-drop mode (drag a WAV into the plugin instead of recording), stem re-render into host via ARA (the real endgame for inline editing).
+- Roadmap: waveform display of capture with stem overlays, offline file-drop mode (drag a WAV into the plugin instead of recording), stem re-render into host via ARA (the real endgame for inline editing). (The `htdemucs_ft` ensemble "quality" mode already shipped; it's the **Fine-tuned** entry in the model menu.)
 
 ## Legal note
 
-HTDemucs weights are MIT-licensed (Meta research); demucs.cpp is MIT. Fine for commercial use, but do your own diligence before shipping.
+Tenganisha itself is MIT-licensed (see LICENSE). HTDemucs weights are MIT-licensed (Meta research); demucs.cpp is MIT. Fine for commercial use, but do your own diligence before shipping.

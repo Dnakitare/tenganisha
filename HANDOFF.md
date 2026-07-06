@@ -64,4 +64,4 @@
   - drag-a-stem-strip → valid 24-bit/44.1k stereo WAV lands on a REAPER track
   - found+fixed live: hosts run FX while the transport is stopped (REAPER anticipative processing runs it faster than realtime); capture now only ingests blocks where the host reports playing, else the take is stuffed with silence and misaligned (was -13 dB residual before fix)
   - still human: subjective separation quality listening; drag-to-Finder
-- [ ] README build instructions verified from scratch on a clean machine/container
+- [x] README build instructions verified from scratch on a clean machine/container (2026-07-06: GitHub Actions macos-14 runner builds from scratch and runs the correctness gates on every push — see `.github/workflows/ci.yml`)
