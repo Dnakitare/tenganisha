@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "ModelLibrary.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 
 namespace tg
@@ -246,26 +247,36 @@ TenganishaEditor::TenganishaEditor (TenganishaProcessor& p)
     addAndMakeVisible (recordBtn);
     addAndMakeVisible (separateBtn);
     addAndMakeVisible (discardBtn);
-    addAndMakeVisible (loadModelBtn);
+    addAndMakeVisible (modelBox);
 
-    loadModelBtn.onClick = [this]
-    {
-        chooser = std::make_unique<juce::FileChooser> (
-            "Select ggml model weights (.bin)",
-            juce::File::getSpecialLocation (juce::File::userHomeDirectory),
-            "*.bin");
-        chooser->launchAsync (juce::FileBrowserComponent::openMode
-                            | juce::FileBrowserComponent::canSelectFiles,
-            [this] (const juce::FileChooser& fc)
-            {
-                if (fc.getResult().existsAsFile())
-                    proc.engine.loadModelAsync (fc.getResult());
-            });
-    };
+    modelBox.addItem ("Standard model", 1);
+    modelBox.addItem ("Fine-tuned (best, 4x slower)", 2);
+    modelBox.addItem ("Custom model file...", 3);
+    modelBox.setTextWhenNothingSelected ("Choose model");
+    modelBox.onChange = [this] { onModelChoice(); };
 
     recordBtn.onClick   = [this] { proc.startRecording(); };
     separateBtn.onClick = [this] { proc.stopRecordingAndSeparate(); };
     discardBtn.onClick  = [this] { proc.discardStems(); };
+
+    // No hunting for files: reload the session's model, or default to the
+    // standard set if it's installed. (Snapshot tool opts out for
+    // deterministic state renders.)
+    if (! juce::SystemStats::getEnvironmentVariable ("TENGANISHA_NO_AUTOLOAD", "").isNotEmpty())
+    {
+        if (proc.getModelPath().isNotEmpty())
+        {
+            proc.loadSavedModelIfAny();
+            selectComboForPath (proc.getModelPath());
+        }
+        else if (models::isInstalled (models::Kind::standard)
+                 && ! proc.engine.isModelLoaded() && ! proc.engine.isBusy())
+        {
+            proc.engine.loadModelAsync (models::primaryFile (models::Kind::standard));
+            proc.setModelPath (models::primaryFile (models::Kind::standard).getFullPathName());
+            modelBox.setSelectedId (1, juce::dontSendNotification);
+        }
+    }
 
     startTimerHz (15);
     updateForState();
@@ -280,12 +291,132 @@ TenganishaEditor::~TenganishaEditor()
     setLookAndFeel (nullptr);
 }
 
+//==============================================================================
+void TenganishaEditor::selectComboForPath (const juce::String& path)
+{
+    if      (path == models::primaryFile (models::Kind::standard).getFullPathName())
+        modelBox.setSelectedId (1, juce::dontSendNotification);
+    else if (path == models::primaryFile (models::Kind::fineTuned).getFullPathName())
+        modelBox.setSelectedId (2, juce::dontSendNotification);
+    else if (path.isNotEmpty())
+        modelBox.setSelectedId (3, juce::dontSendNotification);
+}
+
+void TenganishaEditor::onModelChoice()
+{
+    downloadError.clear();
+    const int id = modelBox.getSelectedId();
+
+    if (id == 3) // custom file
+    {
+        chooser = std::make_unique<juce::FileChooser> (
+            "Select ggml model weights (.bin)",
+            juce::File::getSpecialLocation (juce::File::userHomeDirectory),
+            "*.bin");
+        chooser->launchAsync (juce::FileBrowserComponent::openMode
+                            | juce::FileBrowserComponent::canSelectFiles,
+            [this] (const juce::FileChooser& fc)
+            {
+                if (fc.getResult().existsAsFile())
+                {
+                    proc.engine.loadModelAsync (fc.getResult());
+                    proc.setModelPath (fc.getResult().getFullPathName());
+                }
+            });
+        return;
+    }
+
+    const auto kind = id == 2 ? models::Kind::fineTuned : models::Kind::standard;
+    if (models::isInstalled (kind))
+    {
+        proc.engine.loadModelAsync (models::primaryFile (kind));
+        proc.setModelPath (models::primaryFile (kind).getFullPathName());
+    }
+    else
+    {
+        startDownload ((int) kind);
+    }
+}
+
+void TenganishaEditor::startDownload (int kind)
+{
+    if (dlTask != nullptr) return; // one at a time
+
+    models::directory().createDirectory();
+    dlRemaining.clear();
+    for (const auto& name : models::filenames ((models::Kind) kind))
+        if (! models::directory().getChildFile (name).existsAsFile())
+            dlRemaining.add (name);
+
+    dlKind = kind;
+    dlTotalFiles = dlRemaining.size();
+    dlProgress = 0.0f;
+    pollDownload(); // kicks the first file
+}
+
+void TenganishaEditor::pollDownload()
+{
+    if (dlKind < 0) return;
+
+    if (dlTask != nullptr)
+    {
+        if (! dlTask->isFinished())
+        {
+            const auto total = (double) juce::jmax ((juce::int64) 1, dlTask->getTotalLength());
+            const float filePart = (float) ((double) dlTask->getLengthDownloaded() / total);
+            const int doneFiles = dlTotalFiles - dlRemaining.size() - 1;
+            dlProgress = ((float) doneFiles + filePart) / (float) dlTotalFiles;
+            return;
+        }
+
+        const bool failed = dlTask->hadError();
+        dlTask.reset();
+        if (failed)
+        {
+            models::directory().getChildFile (dlRemaining[0]).deleteFile(); // no partials
+            dlKind = -1;
+            modelBox.setSelectedId (0, juce::dontSendNotification);
+            downloadError = "Download failed. Check your connection and pick the model again";
+            repaint();
+            return;
+        }
+        dlRemaining.remove (0);
+    }
+
+    if (dlRemaining.isEmpty()) // set complete: load it
+    {
+        const auto kind = (models::Kind) dlKind;
+        dlKind = -1;
+        proc.engine.loadModelAsync (models::primaryFile (kind));
+        proc.setModelPath (models::primaryFile (kind).getFullPathName());
+        return;
+    }
+
+    const auto name   = dlRemaining[0];
+    const auto target = models::directory().getChildFile (name);
+    dlTask = juce::URL (models::baseUrl() + name)
+                 .downloadToFile (target, juce::URL::DownloadTaskOptions());
+    if (dlTask == nullptr)
+    {
+        dlKind = -1;
+        downloadError = "Download could not start. Check your connection";
+        repaint();
+    }
+}
+
 void TenganishaEditor::timerCallback()
 {
     const auto st = proc.getEngineState();
     const auto progress = proc.engine.getProgress();
 
+    pollDownload();
     updateForState();
+
+    if (dlKind >= 0)
+    {
+        repaint (statusArea);
+        repaint (headerArea);
+    }
 
     // Repaint only when something visible moves; recording animates the pulse.
     if (st != lastState
@@ -306,22 +437,32 @@ void TenganishaEditor::updateForState()
     recordBtn.setEnabled   (modelReady && st == EngineState::passthrough);
     separateBtn.setEnabled (st == EngineState::recording);
     discardBtn.setEnabled  (st == EngineState::stemPlayback);
-    loadModelBtn.setEnabled (! proc.engine.isBusy());
-
     // The expected next action carries an accent; everything else stays quiet.
     recordBtn.setColour (juce::TextButton::textColourOffId,
                          recordBtn.isEnabled() ? palette::record : palette::text.withAlpha (0.85f));
     separateBtn.setColour (juce::TextButton::textColourOffId,
                            separateBtn.isEnabled() ? palette::stem (3) : palette::text.withAlpha (0.85f));
-    loadModelBtn.setColour (juce::TextButton::textColourOffId,
-                            modelReady ? palette::textDim : palette::text.withAlpha (0.85f));
+
+    if (dlKind >= 0)
+    {
+        const auto kindName = dlKind == (int) models::Kind::fineTuned ? "fine-tuned models" : "standard model";
+        statusText = "Downloading " + juce::String (kindName) + " "
+                     + juce::String ((int) (dlProgress * 100.0f)) + "%";
+        statePill = "DOWNLOADING";
+        statePillColour = palette::stem (1);
+        modelBox.setEnabled (false);
+        return;
+    }
+    modelBox.setEnabled (! proc.engine.isBusy());
 
     juce::String s;
     switch (st)
     {
         case EngineState::passthrough:
             s = modelReady ? "Press Record, play the section in your DAW, then Separate"
-                           : "Load an HTDemucs model (.bin) to begin";
+                           : (downloadError.isNotEmpty()
+                                  ? downloadError
+                                  : "Pick a model to begin. Standard and fine-tuned download themselves");
             statePill = modelReady ? "READY" : "NO MODEL";
             statePillColour = palette::textDim;
             break;
@@ -415,13 +556,14 @@ void TenganishaEditor::drawStatusRow (juce::Graphics& g, juce::Rectangle<int> ar
     g.setFont (juce::Font (juce::FontOptions (12.5f)));
     g.drawText (statusText, r.withTrimmedBottom (6), juce::Justification::centredLeft);
 
-    if (st == EngineState::separating)
+    if (st == EngineState::separating || dlKind >= 0)
     {
         // Progress as the four strands sweeping together.
+        const float p = dlKind >= 0 ? dlProgress : displayedProgress;
         auto bar = area.removeFromBottom (4).toFloat().reduced (0.0f, 0.5f);
         g.setColour (palette::hairline);
         g.fillRoundedRectangle (bar, 1.5f);
-        auto done = bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, displayedProgress));
+        auto done = bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, p));
         const float quarter = done.getWidth() / 4.0f;
         for (int s = 0; s < kNumStems; ++s)
         {
@@ -455,7 +597,7 @@ void TenganishaEditor::resized()
     separateBtn.setBounds (transport.removeFromLeft (88));
     transport.removeFromLeft (6);
     discardBtn.setBounds  (transport.removeFromLeft (88));
-    loadModelBtn.setBounds (transport.removeFromRight (108));
+    modelBox.setBounds (transport.removeFromRight (206));
 
     r.removeFromTop (4);
     statusArea = r.removeFromTop (26);

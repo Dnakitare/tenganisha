@@ -15,10 +15,12 @@ A VST3/AU stem separation plugin. Record a section straight off the host timelin
 
 ## Workflow
 
-1. **Load Model…** → pick a ggml `.bin` (see `scripts/download_model.sh`).
+1. Pick a model from the menu: **Standard** or **Fine-tuned (best, 4x slower)**. Neither ships inside the plugin; the first time you pick one it downloads itself to `~/Library/Application Support/Tenganisha/models` with a progress readout. After that it loads instantly, and your choice is remembered with the session. (**Custom model file…** still lets you point at any ggml `.bin`.)
 2. **Record**, play the section in your DAW, **Separate**.
-3. Mix with per-stem gain / mute / solo, or **drag a stem strip into your DAW** to get a 24-bit WAV on a new track.
+3. Mix with per-stem gain / mute / solo, or grab the **drag handle** at the bottom of a strip to drop a 24-bit WAV of that stem onto a new track.
 4. **Discard** returns to clean passthrough.
+
+Standard vs fine-tuned: standard is one model, ~2x realtime, and its four stems sum back to the mix almost exactly. Fine-tuned is a four-model ensemble (one specialist per stem), ~6-7x realtime, noticeably cleaner soloed stems. Use standard for inline full-mix playback, fine-tuned when you're soloing or exporting.
 
 ## Building
 

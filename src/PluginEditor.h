@@ -105,13 +105,26 @@ private:
     TenganishaProcessor& proc;
     TgLookAndFeel lookAndFeel;
 
+    void onModelChoice();
+    void startDownload (int kind);
+    void pollDownload();
+    void selectComboForPath (const juce::String& path);
+
     juce::TextButton recordBtn    { "Record" };
     juce::TextButton separateBtn  { "Separate" };
     juce::TextButton discardBtn   { "Discard" };
-    juce::TextButton loadModelBtn { "Load model..." };
+    juce::ComboBox   modelBox;
 
     juce::OwnedArray<StemStrip> strips;
     std::unique_ptr<juce::FileChooser> chooser;
+
+    // in-plugin model download (sequential files, e.g. the ft ensemble)
+    std::unique_ptr<juce::URL::DownloadTask> dlTask;
+    juce::StringArray dlRemaining;   // filenames still to fetch
+    int   dlKind       = -1;         // models::Kind while downloading, else -1
+    int   dlTotalFiles = 0;
+    float dlProgress   = 0.0f;
+    juce::String downloadError;
 
     juce::Rectangle<int> headerArea, statusArea;
     juce::String statusText, statePill;

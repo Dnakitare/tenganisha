@@ -37,6 +37,11 @@ public:
     void stopRecordingAndSeparate();
     void discardStems();            // back to passthrough
 
+    // Model choice persists with the session and reloads on state restore.
+    void setModelPath (const juce::String& path);
+    juce::String getModelPath() const;
+    void loadSavedModelIfAny();
+
     EngineState getEngineState() const { return (EngineState) engineState.load(); }
     StemSetPtr  getStems() const       { return std::atomic_load (&currentStems); }
     double      getRecordedSeconds() const;

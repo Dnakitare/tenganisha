@@ -41,6 +41,11 @@ int main (int argc, char** argv)
         return 2;
     }
 
+    // Deterministic states: don't let the editor auto-load installed models.
+   #if ! JUCE_WINDOWS
+    setenv ("TENGANISHA_NO_AUTOLOAD", "1", 1);
+   #endif
+
     juce::ScopedJuceInitialiser_GUI juceInit;
 
     const auto outDir = juce::File::getCurrentWorkingDirectory()

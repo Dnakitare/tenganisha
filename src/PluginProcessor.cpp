@@ -127,6 +127,26 @@ void TenganishaProcessor::stopRecordingAndSeparate()
         engineState.store ((int) EngineState::passthrough);
 }
 
+static constexpr const char* kModelPathProperty = "modelFile";
+
+void TenganishaProcessor::setModelPath (const juce::String& path)
+{
+    apvts.state.setProperty (kModelPathProperty, path, nullptr);
+}
+
+juce::String TenganishaProcessor::getModelPath() const
+{
+    return apvts.state.getProperty (kModelPathProperty, {}).toString();
+}
+
+void TenganishaProcessor::loadSavedModelIfAny()
+{
+    const juce::File f (getModelPath());
+    if (f.getFullPathName().isNotEmpty() && f.existsAsFile()
+        && ! engine.isModelLoaded() && ! engine.isBusy())
+        engine.loadModelAsync (f);
+}
+
 void TenganishaProcessor::discardStems()
 {
     std::atomic_store (&currentStems, StemSetPtr());
@@ -254,7 +274,10 @@ void TenganishaProcessor::getStateInformation (juce::MemoryBlock& dest)
 void TenganishaProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
+    {
         apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        loadSavedModelIfAny(); // session reload brings its model back
+    }
 }
 
 juce::AudioProcessorEditor* TenganishaProcessor::createEditor()

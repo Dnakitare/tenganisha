@@ -151,6 +151,30 @@ target_link_libraries(tenganisha_offline_test
         # they make JUCE's own module TUs noisy in console-app targets.
         juce::juce_recommended_config_flags)
 
+# ---------------------------------------------------------------- Model-manager test
+juce_add_console_app(tenganisha_model_manager_test PRODUCT_NAME "tenganisha_model_manager_test")
+
+target_sources(tenganisha_model_manager_test PRIVATE
+    test/model_manager_test.cpp
+    src/PluginProcessor.cpp
+    src/PluginEditor.cpp
+    src/SeparationEngine.cpp)
+
+target_include_directories(tenganisha_model_manager_test PRIVATE src)
+
+target_compile_definitions(tenganisha_model_manager_test PRIVATE
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0)
+
+target_link_libraries(tenganisha_model_manager_test
+    PRIVATE
+        demucs_inference
+        juce::juce_audio_utils
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags)
+
 # ---------------------------------------------------------------- UI snapshots
 # Renders the editor offscreen to PNGs per engine state (visual review, README).
 juce_add_console_app(tenganisha_ui_snapshot PRODUCT_NAME "tenganisha_ui_snapshot")
