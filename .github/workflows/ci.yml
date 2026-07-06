@@ -8,8 +8,14 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: &docs
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
   pull_request:
     branches: [main]
+    paths-ignore: *docs
   workflow_dispatch:
 
 concurrency:
