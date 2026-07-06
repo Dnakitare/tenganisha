@@ -46,7 +46,8 @@ Accelerate does the heavy lifting; OpenMP adds ~5% on top. **Known debt:** with 
 
 | File | Stems | Notes |
 |---|---|---|
-| `ggml-model-htdemucs-4s-f16.bin` | 4 | default, best quality/size balance |
+| `ggml-model-htdemucs-4s-f16.bin` | 4 | default, best quality/speed balance |
+| `ggml-model-htdemucs_ft_*-4s-f16.bin` | 4 | fine-tuned ensemble: 4 specialist models, 4x separation time, best quality. Fetch with `download_model.sh --ft`, then load any one of the four files; its siblings are found automatically |
 | `ggml-model-htdemucs-6s-f16.bin` | 6 | guitar+piano folded into "Other" in this UI |
 
 ## Status (2026-07-05)
@@ -60,7 +61,8 @@ Accelerate does the heavy lifting; OpenMP adds ~5% on top. **Known debt:** with 
 
 ## Honest limitations / roadmap
 
-- Separation is CPU-only; a 3-minute song is roughly real-time × 1–4 on a modern laptop.
+- Separation is CPU-only; a 3-minute song is roughly real-time × 1–4 on a modern laptop (× 6–7 with the fine-tuned ensemble).
+- Fine-tuned stems are cleaner individually but sum slightly less exactly to the input than the standard model's (measured -21 dB vs -31 dB reconstruction residual): each specialist optimises its own stem, so the four outputs aren't a perfect partition of the mix. Prefer standard for inline full-mix playback fidelity, fine-tuned for soloed/exported stems.
 - `cancel()` is drop-on-completion, not mid-segment abort.
 - Roadmap: waveform display of capture with stem overlays, fine-tuned per-stem models (`htdemucs_ft`) as an ensemble "quality" mode, offline file-drop mode (drag a WAV into the plugin instead of recording), stem re-render into host via ARA (the real endgame for inline editing).
 

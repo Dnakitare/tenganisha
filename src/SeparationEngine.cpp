@@ -7,7 +7,11 @@
 
 struct demucs_model_holder
 {
-    demucscpp::demucs_model m;
+    // 1 entry: standard htdemucs (all stems from one model).
+    // 4 entries: htdemucs_ft ensemble, models[i] specialises stem i
+    // (drums, bass, other, vocals) — 4x inference for better quality.
+    std::vector<std::unique_ptr<demucscpp::demucs_model>> models;
+    bool isFineTuned = false;
 };
 
 namespace tg
@@ -126,13 +130,52 @@ void SeparationEngine::run()
             juce::File f;
             { const juce::ScopedLock sl (jobLock); f = weightsFile; }
 
-            const bool ok = f.existsAsFile()
-                && demucscpp::load_demucs_model (f.getFullPathName().toStdString(),
-                                                 &model->m);
+            bool ok = false;
+            juce::String failText = "Failed to load model";
+
+            // Picking any htdemucs_ft file selects the whole fine-tuned
+            // ensemble: its three siblings are found next to it by stem name.
+            const bool wantFt = f.getFileName().contains ("htdemucs_ft");
+            model->models.clear();
+            model->isFineTuned = false;
+
+            if (wantFt)
+            {
+                ok = f.existsAsFile();
+                for (int s = 0; s < kNumStems && ok; ++s)
+                {
+                    auto matches = f.getParentDirectory().findChildFiles (
+                        juce::File::findFiles, false,
+                        juce::String ("*htdemucs_ft_") + juce::String (stemName (s)).toLowerCase() + "*.bin");
+                    if (matches.isEmpty())
+                    {
+                        failText = juce::String ("Fine-tuned set incomplete: no ")
+                                   + juce::String (stemName (s)).toLowerCase() + " model beside it";
+                        ok = false;
+                        break;
+                    }
+                    model->models.push_back (std::make_unique<demucscpp::demucs_model>());
+                    ok = demucscpp::load_demucs_model (
+                        matches[0].getFullPathName().toStdString(), model->models.back().get());
+                }
+                model->isFineTuned = ok;
+            }
+            else if (f.existsAsFile())
+            {
+                model->models.push_back (std::make_unique<demucscpp::demucs_model>());
+                ok = demucscpp::load_demucs_model (f.getFullPathName().toStdString(),
+                                                   model->models.back().get());
+            }
+
+            if (! ok)
+                model->models.clear();
+
             modelLoaded.store (ok);
             {
                 const juce::ScopedLock sl (jobLock);
-                statusText = ok ? "Model ready" : "Failed to load model";
+                statusText = ok ? (model->isFineTuned ? "Model ready (fine-tuned ensemble)"
+                                                      : "Model ready")
+                                : failText;
             }
             auto cbOk  = onModelLoaded;
             auto cbErr = onError;
@@ -160,13 +203,32 @@ void SeparationEngine::run()
             auto modelInput = resample (audio, rate, modelRate);
             Eigen::MatrixXf eig = toEigenStereo (modelInput);
 
-            // 2. inference (progress callback ticks our atomic)
+            // 2. inference (progress callback ticks our atomic). Fine-tuned
+            //    ensemble: run each specialist, keep its own stem's row.
             auto* prog = &progress;
-            Eigen::Tensor3dXf targets = demucscpp::demucs_inference (
-                model->m, eig,
-                [prog] (float p, const std::string&) { prog->store (p); });
+            const int nModels = (int) model->models.size();
+            Eigen::Tensor3dXf targets;
 
-            const int nSources = model->m.is_4sources ? 4 : 6;
+            for (int mi = 0; mi < nModels && ! threadShouldExit(); ++mi)
+            {
+                const float base = (float) mi / (float) nModels;
+                auto out = demucscpp::demucs_inference (
+                    *model->models[(size_t) mi], eig,
+                    [prog, base, nModels] (float p, const std::string&)
+                    { prog->store (base + p / (float) nModels); });
+
+                if (mi == 0)
+                    targets = std::move (out);
+                else // specialist mi owns stem mi
+                    for (int ch = 0; ch < 2; ++ch)
+                        for (int i = 0; i < (int) out.dimension (2); ++i)
+                            targets (mi, ch, i) = out (mi, ch, i);
+            }
+
+            if (threadShouldExit())
+                break; // shutting down mid-ensemble: don't publish partials
+
+            const int nSources = model->models[0]->is_4sources ? 4 : 6;
             const int nSamples = (int) targets.dimension (2);
 
             // 3. build StemSet at host rate. 6-source models fold
