@@ -1,5 +1,7 @@
 # Tenganisha
 
+[![CI](https://github.com/Dnakitare/tenganisha/actions/workflows/ci.yml/badge.svg)](https://github.com/Dnakitare/tenganisha/actions/workflows/ci.yml)
+
 ![Tenganisha editor, stems live](docs/ui/state-stems-live.png)
 
 A VST3/AU stem separation plugin. Record a section straight off the host timeline, separate it into drums / bass / other / vocals with HTDemucs (via demucs.cpp), then mix the stems **inline, playhead-aligned** — no bounce-out/re-import round trip.
