@@ -46,10 +46,18 @@ else()
     target_compile_options(demucs_inference PRIVATE -O3 -ffast-math -fno-finite-math-only)
 endif()
 
-# Threaded Eigen GEMM. Apple Clang has no native OpenMP; point FindOpenMP at
-# Homebrew's libomp. Note the dylib dependency this creates on brew's libomp —
-# fine for local dev, wrong for distribution (see TENGANISHA_OPENMP below).
-option(TENGANISHA_OPENMP "Thread Eigen GEMM with OpenMP" ON)
+# Threaded Eigen GEMM via OpenMP. OFF by default, and deliberately so on macOS:
+# with EIGEN_USE_BLAS (below) the heavy matrix products already go to
+# Accelerate's AMX units, which thread internally, so OpenMP only parallelises
+# the residual Eigen ops — measured ~5% on an M2 (34.0s -> 32.2s). That 5% is
+# not worth what it costs to ship: Apple Clang has no native OpenMP, so the
+# binary would link Homebrew's libomp.dylib by absolute path (breaks on any
+# machine without that exact brew prefix), and two plugins each carrying an
+# OpenMP runtime can trip the "multiple libomp initialised" abort inside a DAW.
+# Leave it OFF for anything distributable; turn it ON only for local dev builds
+# where you have brew libomp and want the last few percent. On Linux/Windows the
+# runtime comes from the toolchain and none of these caveats apply.
+option(TENGANISHA_OPENMP "Thread residual Eigen GEMM with OpenMP (dev-only on macOS; see note)" OFF)
 if(NOT TENGANISHA_OPENMP)
     set(OpenMP_CXX_FOUND FALSE)
 else()
@@ -69,6 +77,9 @@ endif()
 if(OpenMP_CXX_FOUND)
     message(STATUS "Tenganisha: OpenMP enabled for demucs_inference")
     if(APPLE)
+        message(WARNING "Tenganisha: OpenMP on macOS links Homebrew libomp by "
+                        "absolute path — this build is NOT distributable. Use the "
+                        "default (OpenMP OFF, Accelerate-only) for release builds.")
         # Compile flags PRIVATE: Eigen's parallel GEMM instantiates inside this
         # target's TUs, and the flags must not leak into JUCE/plugin TUs
         # (they re-trigger warnings JUCE suppresses). Link stays PUBLIC so the

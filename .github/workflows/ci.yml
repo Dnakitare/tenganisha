@@ -1,0 +1,91 @@
+name: CI
+
+# Proves Tenganisha builds and passes its correctness gates on a clean machine:
+# a fresh runner with none of the developer's toolchain state, fetching JUCE and
+# demucs.cpp from scratch each run. macOS default config is Accelerate-only
+# (no Homebrew libomp), so nothing extra needs installing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: Build + test (macOS arm64)
+    runs-on: macos-14  # Apple Silicon; exercises the Accelerate (AMX) path
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tool versions
+        run: |
+          cmake --version
+          clang --version
+          sw_vers
+
+      - name: Configure (Release, default flags)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      # Fails the run if the default macOS build somehow pulls in libomp: the
+      # whole point of the OpenMP-off default is a self-contained binary.
+      - name: Assert default config is Accelerate-only (no OpenMP)
+        run: |
+          if ! grep -q '^TENGANISHA_OPENMP:BOOL=OFF' build/CMakeCache.txt; then
+            echo "TENGANISHA_OPENMP is not OFF by default"; exit 1
+          fi
+          echo "ok: OpenMP off by default (the otool step below proves no libomp ref)"
+
+      - name: Build all targets
+        run: cmake --build build --config Release -j3
+
+      # No libomp anywhere in the shipped plugin binary. This is the debt check:
+      # a clean machine has no Homebrew libomp, so a dylib ref would also mean a
+      # broken plugin here.
+      - name: Assert plugin binary has no libomp dependency
+        run: |
+          BIN=$(find build/Tenganisha_artefacts -type f -name Tenganisha -path '*VST3*' | head -1)
+          echo "inspecting $BIN"
+          otool -L "$BIN"
+          if otool -L "$BIN" | grep -qi 'libomp'; then
+            echo "FAIL: plugin links libomp"; exit 1
+          fi
+          echo "ok: no libomp dependency"
+
+      # Plugin instantiation, editor creation, and state persistence. Needs no
+      # model (the no-model path is what runs on a fresh machine).
+      - name: Smoke test (model manager, no model)
+        run: ./build/tenganisha_model_manager_test_artefacts/Release/tenganisha_model_manager_test
+
+      # ~80 MB of ggml weights; cache so only the first run on a given model
+      # version pays the download.
+      - name: Cache HTDemucs standard model
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: htdemucs-4s-f16-v1
+
+      - name: Download standard model
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p models
+          curl -fL --retry 3 -o models/ggml-model-htdemucs-4s-f16.bin \
+            https://huggingface.co/datasets/Retrobear/demucs.cpp/resolve/main/ggml-model-htdemucs-4s-f16.bin
+          test "$(stat -f%z models/ggml-model-htdemucs-4s-f16.bin)" -gt 1000000
+
+      # Real end-to-end separation on the clean machine: record -> separate ->
+      # timeline-aligned playback, sample-alignment gate.
+      - name: Host-sim test (state machine + alignment)
+        run: ./build/tenganisha_host_sim_test_artefacts/Release/tenganisha_host_sim_test models/ggml-model-htdemucs-4s-f16.bin
+
+      # Reconstruction gate: stems summed at unity null against the input.
+      - name: Offline reconstruction test
+        run: ./build/tenganisha_offline_test_artefacts/Release/tenganisha_offline_test models/ggml-model-htdemucs-4s-f16.bin
